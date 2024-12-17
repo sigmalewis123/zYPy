@@ -5,6 +5,7 @@ from tkinter import filedialog
 import sys
 from io import StringIO
 import os
+import builtins
 
 class CodeTab:
     def __init__(self, text_widget, line_number_widget, filepath=None):
@@ -61,10 +62,10 @@ class SimpleCodeEditor:
         self.button_frame.pack(pady=5)
 
         # Run and Clear Buttons
-        self.run_button = ttk.Button(self.button_frame, text="▶ Run Code", command=self.run_code, style='Run.TButton')
+        self.run_button = ttk.Button(self.button_frame, text=" Run Code", command=self.run_code, style='Run.TButton')
         self.run_button.pack(side='left', padx=5)
         
-        self.clear_button = ttk.Button(self.button_frame, text="🗑 Clear", command=self.clear_editor)
+        self.clear_button = ttk.Button(self.button_frame, text="", command=self.clear_editor)
         self.clear_button.pack(side='left', padx=5)
 
         # Output Section
@@ -200,19 +201,76 @@ class SimpleCodeEditor:
         self.output_area.delete('1.0', tk.END)
         current_tab = self.get_current_tab()
         code = current_tab.text_widget.get('1.0', tk.END)
-
+        
         old_stdout = sys.stdout
+        old_stdin = sys.stdin
         redirected_output = StringIO()
         sys.stdout = redirected_output
 
+        # Override the input function
+        def custom_input(prompt=''):
+            # Print the prompt to our redirected output
+            print(prompt, end='')
+            
+            # Create an input dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Input Required")
+            dialog.geometry("300x150")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            # Center the dialog
+            dialog.geometry("+%d+%d" % (
+                self.root.winfo_x() + (self.root.winfo_width() - 300) // 2,
+                self.root.winfo_y() + (self.root.winfo_height() - 150) // 2
+            ))
+            
+            frame = ttk.Frame(dialog, padding="20")
+            frame.pack(expand=True, fill='both')
+            
+            # Show the prompt
+            if prompt:
+                ttk.Label(frame, text=prompt, wraplength=250).pack(pady=(0, 10))
+            
+            # Create an entry widget
+            entry = ttk.Entry(frame)
+            entry.pack(fill='x', pady=(0, 20))
+            entry.focus_set()
+            
+            # Variable to store the result
+            result = []
+            
+            def on_ok():
+                result.append(entry.get())
+                dialog.destroy()
+            
+            # Add OK button
+            ttk.Button(frame, text="OK", command=on_ok).pack()
+            
+            # Handle Enter key
+            entry.bind('<Return>', lambda e: on_ok())
+            
+            # Make dialog non-resizable
+            dialog.resizable(False, False)
+            
+            # Wait for the dialog to close
+            dialog.wait_window()
+            
+            # Return the input or empty string if cancelled
+            return result[0] if result else ''
+
         try:
-            exec(code)
+            # Replace the built-in input function
+            builtins_dict = {'input': custom_input}
+            # Execute the code with our custom input function
+            exec(code, builtins_dict)
             output = redirected_output.getvalue()
             self.output_area.insert('1.0', output)
         except Exception as e:
             self.output_area.insert('1.0', f"Error:\n{str(e)}")
         finally:
             sys.stdout = old_stdout
+            sys.stdin = old_stdin
 
     def auto_complete(self, event, closing_char, editor):
         try:
