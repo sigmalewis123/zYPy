@@ -1,19 +1,15 @@
-try:
-    import tkinter as tk
-    from tkinter import ttk
-    from tkinter import messagebox
-    from tkinter import filedialog
-except ImportError:
-    print("Error: tkinter is not installed. Please install Python with tkinter support.")
-    exit(1)
-
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
+from tkinter import filedialog
 import sys
 from io import StringIO
 import os
 
 class CodeTab:
-    def __init__(self, text_widget, filepath=None):
+    def __init__(self, text_widget, line_number_widget, filepath=None):
         self.text_widget = text_widget
+        self.line_number_widget = line_number_widget
         self.filepath = filepath
         self.modified = False
         
@@ -22,56 +18,69 @@ class CodeTab:
             return os.path.basename(self.filepath)
         return "Untitled"
 
+class RoundedFrame(tk.Canvas):
+    def __init__(self, parent, width, height, corner_radius=20, bg_color="#1e1e1e", **kwargs):
+        super().__init__(parent, width=width, height=height, bg=bg_color, bd=0, highlightthickness=0, **kwargs)
+        self.corner_radius = corner_radius
+        self.bg_color = bg_color
+        self.create_rounded_rect()
+
+    def create_rounded_rect(self):
+        self.create_arc((0, 0, self.corner_radius * 2, self.corner_radius * 2), start=0, extent=90, fill=self.bg_color, outline=self.bg_color)
+        self.create_arc((self.winfo_width() - self.corner_radius * 2, 0, self.winfo_width(), self.corner_radius * 2), start=90, extent=90, fill=self.bg_color, outline=self.bg_color)
+        self.create_arc((0, self.winfo_height() - self.corner_radius * 2, self.corner_radius * 2, self.winfo_height()), start=270, extent=90, fill=self.bg_color, outline=self.bg_color)
+        self.create_arc((self.winfo_width() - self.corner_radius * 2, self.winfo_height() - self.corner_radius * 2, self.winfo_width(), self.winfo_height()), start=180, extent=90, fill=self.bg_color, outline=self.bg_color)
+        self.create_rectangle(self.corner_radius, 0, self.winfo_width() - self.corner_radius, self.winfo_height(), fill=self.bg_color, outline=self.bg_color)
+        self.create_rectangle(0, self.corner_radius, self.winfo_width(), self.winfo_height() - self.corner_radius, fill=self.bg_color, outline=self.bg_color)
+
 class SimpleCodeEditor:
     def __init__(self, root):
         self.root = root
         self.root.title("ZYPY")
         self.root.geometry("800x600")
+        self.root.configure(bg="#1e1e1e")
 
-#
-        style = ttk.Style()
-        style.configure('Run.TButton', padding=5)
-#
-        self.main_frame = ttk.Frame(self.root)
-        self.main_frame.pack(expand=True, fill='both', padx=10, pady=10)
+        # Create a rounded window using a canvas
+        self.canvas = RoundedFrame(self.root, width=800, height=600, corner_radius=30, bg_color="#1e1e1e")
+        self.canvas.pack(fill='both', expand=True)
 
-    #
-        self.notebook = ttk.Notebook(self.main_frame)
+        # Main Frame
+        self.main_frame = ttk.Frame(self.canvas, style="TFrame")
+        self.main_frame.place(relwidth=1, relheight=1)
+
+        # Notebook (Tab bar)
+        self.notebook = ttk.Notebook(self.main_frame, style="TNotebook")
         self.notebook.pack(expand=True, fill='both', pady=(0, 5))
-    #
         self.tabs = []
 
-    #
+        # Create Menu Bar
         self.create_menu()
 
-       #
-        self.button_frame = ttk.Frame(self.main_frame)
+        # Buttons at the bottom
+        self.button_frame = ttk.Frame(self.main_frame, style="TFrame")
         self.button_frame.pack(pady=5)
 
-      #
+        # Run and Clear Buttons
         self.run_button = ttk.Button(self.button_frame, text="▶ Run Code", command=self.run_code, style='Run.TButton')
         self.run_button.pack(side='left', padx=5)
-
-   #
+        
         self.clear_button = ttk.Button(self.button_frame, text="🗑 Clear", command=self.clear_editor)
         self.clear_button.pack(side='left', padx=5)
 
-       #
-        self.output_label = ttk.Label(self.main_frame, text="Output:", font=('Consolas', 10, 'bold'))
+        # Output Section
+        self.output_label = ttk.Label(self.main_frame, text="Output:", font=('Consolas', 10, 'bold'), background="#1e1e1e", foreground="#d4d4d4")
         self.output_label.pack(anchor='w', pady=(10,0))
         
-        self.output_area = tk.Text(self.main_frame, font=('Consolas', 12), height=8, wrap='word', bg='#f0f0f0')
+        self.output_area = tk.Text(self.main_frame, font=('Consolas', 12), height=8, wrap='word', bg="#1e1e1e", fg="#f0f0f0", insertbackground="white")
         self.output_area.pack(expand=False, fill='both')
 
-#
         self.create_new_tab()
 
     def create_menu(self):
-        menubar = tk.Menu(self.root)
+        menubar = tk.Menu(self.root, bg="#1e1e1e", fg="#f0f0f0")
         self.root.config(menu=menubar)
         
-   #
-        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu = tk.Menu(menubar, tearoff=0, bg="#1e1e1e", fg="#f0f0f0")
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="New", command=self.create_new_tab, accelerator="Ctrl+N")
         file_menu.add_command(label="Open", command=self.open_file, accelerator="Ctrl+O")
@@ -81,7 +90,7 @@ class SimpleCodeEditor:
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self.root.quit)
 
-  #
+        # Key bindings for menu shortcuts
         self.root.bind('<Control-n>', lambda e: self.create_new_tab())
         self.root.bind('<Control-o>', lambda e: self.open_file())
         self.root.bind('<Control-s>', lambda e: self.save_file())
@@ -91,38 +100,45 @@ class SimpleCodeEditor:
         self.root.bind('<Control-Shift-Tab>', lambda e: self.prev_tab())
 
     def create_new_tab(self):
-        ##
         tab_frame = ttk.Frame(self.notebook)
-        
-        ##
-        code_editor = tk.Text(tab_frame, font=('Consolas', 12), wrap='none', undo=True)
-        code_editor.pack(expand=True, fill='both')
-        
-     #
-        self.add_editor_bindings(code_editor)
-        
-     #
-        code_tab = CodeTab(code_editor)
+
+        # Line Number Area
+        line_number_frame = tk.Frame(tab_frame, bg="#2d2d2d")
+        line_number_frame.pack(side='left', fill='y')
+
+        line_number_widget = tk.Text(line_number_frame, width=4, bg="#2d2d2d", fg="#888888", font=('Consolas', 12), padx=10, pady=5, state=tk.DISABLED)
+        line_number_widget.pack(expand=True, fill='y')
+
+        # Code Editor Area
+        code_editor = tk.Text(tab_frame, font=('Consolas', 12), wrap='none', undo=True, bg="#1e1e1e", fg="#f0f0f0", insertbackground="white")
+        code_editor.pack(side='right', expand=True, fill='both')
+
+        self.add_editor_bindings(code_editor, line_number_widget)
+
+        code_tab = CodeTab(code_editor, line_number_widget)
         self.tabs.append(code_tab)
-        
-       #
+
         self.notebook.add(tab_frame, text=code_tab.get_title())
         self.notebook.select(tab_frame)
-        
-       #
+
         code_editor.bind('<<Modified>>', lambda e: self.on_text_modified(code_tab))
-        
         return code_tab
 
-    def add_editor_bindings(self, editor):
+    def add_editor_bindings(self, editor, line_number_widget):
+        editor.bind("<KeyRelease>", lambda event: self.update_line_numbers(editor, line_number_widget))
         editor.bind('"', lambda event: self.auto_complete(event, '"', editor))
         editor.bind("'", lambda event: self.auto_complete(event, "'", editor))
         editor.bind("(", lambda event: self.auto_complete(event, ")", editor))
         editor.bind("[", lambda event: self.auto_complete(event, "]", editor))
         editor.bind("{", lambda event: self.auto_complete(event, "}", editor))
-        editor.bind('<Control-z>', lambda e: self.undo(editor))
-        editor.bind('<Control-y>', lambda e: self.redo(editor))
-        editor.bind("<BackSpace>", lambda e: self.handle_backspace(e, editor))
+
+    def update_line_numbers(self, editor, line_number_widget):
+        line_count = int(editor.index('end-1c').split('.')[0])  # Get number of lines in the text editor
+        line_numbers = "\n".join(str(i + 1) for i in range(line_count))
+        line_number_widget.config(state=tk.NORMAL)
+        line_number_widget.delete(1.0, tk.END)
+        line_number_widget.insert(tk.END, line_numbers)
+        line_number_widget.config(state=tk.DISABLED)
 
     def get_current_tab(self):
         current_tab_index = self.notebook.index(self.notebook.select())
@@ -169,7 +185,7 @@ class SimpleCodeEditor:
             with open(tab.filepath, 'w') as file:
                 file.write(content)
             tab.modified = False
-           
+
             current_index = self.notebook.index(self.notebook.select())
             self.notebook.tab(current_index, text=tab.get_title())
         except Exception as e:
@@ -184,7 +200,7 @@ class SimpleCodeEditor:
         self.output_area.delete('1.0', tk.END)
         current_tab = self.get_current_tab()
         code = current_tab.text_widget.get('1.0', tk.END)
-        
+
         old_stdout = sys.stdout
         redirected_output = StringIO()
         sys.stdout = redirected_output
@@ -223,7 +239,7 @@ class SimpleCodeEditor:
         except:
             pass
         return 'break'
-    
+
     def redo(self, editor):
         try:
             editor.edit_redo()
@@ -231,41 +247,21 @@ class SimpleCodeEditor:
             pass
         return 'break'
 
-    def handle_backspace(self, event, editor):
-        cursor_pos = editor.index(tk.INSERT)
-        
-        try:
-            char_before = editor.get(f"{cursor_pos} - 1c", cursor_pos)
-            char_after = editor.get(cursor_pos, f"{cursor_pos} + 1c")
-            
-            pairs = {'"': '"', "'": "'", "(": ")", "[": "]", "{": "}"}
-            
-            if char_before in pairs and char_after == pairs[char_before]:
-                editor.delete(f"{cursor_pos} - 1c", f"{cursor_pos} + 1c")
-                return 'break'
-        except:
-            pass
-        
-        return None
-
     def close_current_tab(self, event=None):
-        if len(self.tabs) <= 1: 
+        if len(self.tabs) <= 1:
             self.create_new_tab()
             return
-            
+
         current_tab_index = self.notebook.index(self.notebook.select())
         current_tab = self.tabs[current_tab_index]
-        
-  
+
         if current_tab.modified:
-            if messagebox.askyesno("Save Changes", 
-                f"Do you want to save changes to {current_tab.get_title()}?"):
+            if messagebox.askyesno("Save Changes", f"Do you want to save changes to {current_tab.get_title()}?"):
                 self.save_file()
 
         self.notebook.forget(current_tab_index)
         self.tabs.pop(current_tab_index)
-        
-      
+
         if self.tabs:
             new_index = min(current_tab_index, len(self.tabs) - 1)
             self.notebook.select(new_index)
@@ -286,7 +282,6 @@ class SimpleCodeEditor:
         if tab.text_widget.edit_modified():
             if not tab.modified:
                 tab.modified = True
-        
                 current_index = self.notebook.index(self.notebook.select())
                 current_title = self.notebook.tab(current_index, "text")
                 if not current_title.startswith('*'):
